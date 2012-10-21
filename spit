@@ -82,9 +82,7 @@ class Dev:
         self.children.append(child)
 
     def unmount(self):
-        print("Trying to unmount",self.deviceFile)
         if not self.isMounted:
-            print(self.deviceFile,"is not mounted")
             return
         self.dev.FilesystemUnmount(dbus.Array([],"s"))
 
@@ -113,9 +111,9 @@ for path in udisks.EnumerateDevices():
     dev = bus.get_object("org.freedesktop.UDisks",path)
     devmap.addDev(dev)
 
-pprint(devmap.pathdic)
-pprint(devmap.namedic)
-
 arg = os.path.basename(os.path.realpath(sys.argv[1]))
-eject(devmap.find(arg))
+try:
+    eject(devmap.find(arg))
+except dbus.DBusException as ex:
+    print(ex.get_dbus_message(),file=sys.stderr)
 
