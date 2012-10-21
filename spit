@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+from pprint import pprint
+import dbus
+import sys
+import os
+
+class DevMap:
+    def __init__(self):
+        self.devmap = {}
+
+    def __getitem__(self,path):
+        return self.devmap[path]
+
+    def addDev(self,udisks_device):
+        d = Dev(udisks_device)
+        if d.deviceFile in self.devmap:
+            return
+        self.devmap[d.deviceFile] = d
+        p = d
+        if p.isPartition:
+            pf = p.parentDeviceFile
+            o = p.parentUDisksDevice
+            self.addDev(o)
+            q = self.devmap[pf]
+            q.addChild(p)
+
+devmap = DevMap()
+
+class Dev:
+    def __init__(self,udisks_device):
+        self.dev = udisks_device
+        self.children = []
+
+    @property
+    def deviceFile(self):
+        return str(self.dev.Get("","DeviceFile"))
+
+    def mountPoints(self):
+        l = []
+        for m in self.dev.Get("","DeviceMountPaths"):
+            l.append(str(m))
+        return l
+
+    @property
+    def parentDeviceFile(self):
+        if self.dev.Get("","DeviceIsPartition"):
+            slave = self.dev.Get("","PartitionSlave")
+            o = bus.get_object("org.freedesktop.UDisks",slave)
+            return str(o.Get("","DeviceFile"))
+        return None
+
+    @property
+    def parentUDisksDevice(self):
+        if self.dev.Get("","DeviceIsPartition"):
+            slave = self.dev.Get("","PartitionSlave")
+            return bus.get_object("org.freedesktop.UDisks",slave)
+        return None
+
+    @property
+    def isPartition(self):
+        return bool(self.dev.Get("","DeviceIsPartition"))
+
+    def addChild(self,child):
+        self.children.append(child)
+
+    def isMounted(self):
+        print("isMounted:",self.dev)
+        return bool(self.dev.Get("","DeviceIsMounted"))
+
+    def unmount(self):
+        print("Trying to unmount",self.path)
+        if not self.isMounted():
+            print(self.path,"is not mounted")
+            return
+        self.dev.FilesystemUnmount(dbus.Array([],"s"))
+
+    def eject(self):
+        self.dev.DriveEject(dbus.Array([],"s"))
+
+    def __str__(self):
+        return "Dev(path={},parent={},mountpoints={},children={})".format(self.path,self.parent,self.mountpoints,[x.path for x in self.children])
+
+    def __repr__(self):
+        return self.__str__()
+
+    @staticmethod
+    def get(udisks_device):
+        path = str(udisks_device.Get("","DeviceFile"))
+        if path in devmap:
+            return devmap[path]
+        d = Dev(udisks_device)
+        devmap[path] = d
+        if path == '':
+            d.parent = d
+        return d
+
+basenamedic = {}
+
+#arg = os.path.basename(os.path.realpath(sys.argv[1]))
+
+def eject(dev):
+    if dev.isRoot():
+        return
+    p = dev
+    while not p.parent.isRoot():
+        p = p.parent
+    for c in p.children:
+        c.unmount()
+    p.eject()
+
+def nada():
+    devparent = ""
+    if slave != "/":
+        devparent_object = bus.get_object("org.freedesktop.UDisks",slave)
+        devparent = devparent_object.Get("","DeviceFile")
+    d = Dev(devpath,devparent)
+    devmap[devfile] = d
+    basename = os.path.basename(os.path.realpath(devpath))
+    basenamedic[basename] = d
+
+bus = dbus.SystemBus()
+udisks = bus.get_object("org.freedesktop.UDisks","/org/freedesktop/UDisks")
+for path in udisks.EnumerateDevices():
+    dev = bus.get_object("org.freedesktop.UDisks",path)
+    devmap.addDev(d)
+
+pprint(devmap)
+
+eject(devmap["/dev/sdb"])
+
+#del basenamedic['']
+#pprint(basenamedic)
+#pprint(devs)
+#
+#print("Would eject",basenamedic[arg])
