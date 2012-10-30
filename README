@@ -1,0 +1,7 @@
+====
+SPIT
+====
+
+spit is a simple wrapper around udisks to simplify ejecting removable media
+
+It currently has no options and expects a mount point (full path or basename) or device file (full path or basename as well), and attempts to unmount all partitons and to eject the device. All of that by using udisks via dbus.
